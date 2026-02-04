@@ -3,8 +3,9 @@
 
 import { withInteractable, useTamboComponentState } from '@tambo-ai/react'
 import { z } from 'zod'
-import { BookMarked, Trash2, ExternalLink, RefreshCw } from 'lucide-react'
+import { BookMarked, Trash2, ExternalLink, RefreshCw, Edit2 } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
+import { ConfirmDialog } from '@/components/dialog/ConfirmDialog'
 
 // Zod Schema
 export const CollectionsPropsSchema = z.object({
@@ -32,10 +33,21 @@ function Collections({ collections: initialCollections }: CollectionsProps) {
 
   const [expandedCollection, setExpandedCollection] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const hasLoadedRef = useRef(false) // Prevent duplicate loads
-  const isLoadingRef = useRef(false) // Prevent concurrent loads
+  const hasLoadedRef = useRef(false)
+  const isLoadingRef = useRef(false)
+  
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean
+    collectionId: string
+    collectionName: string
+  } | null>(null)
 
-  // Load collections from database on mount (only once)
+  const [editingCollection, setEditingCollection] = useState<{
+    id: string
+    name: string
+  } | null>(null)
+
+  // Load collections from database on mount
   useEffect(() => {
     if (!hasLoadedRef.current && !isLoadingRef.current) {
       loadCollections()
@@ -43,7 +55,6 @@ function Collections({ collections: initialCollections }: CollectionsProps) {
   }, [])
 
   const loadCollections = async () => {
-    // Prevent duplicate calls
     if (isLoadingRef.current) {
       console.log('⏭️ Skipping duplicate load request')
       return
@@ -70,7 +81,6 @@ function Collections({ collections: initialCollections }: CollectionsProps) {
     }
   }
 
-  // Manual refresh function
   const handleRefresh = () => {
     hasLoadedRef.current = false
     loadCollections()
@@ -80,10 +90,18 @@ function Collections({ collections: initialCollections }: CollectionsProps) {
 
   const handleDeleteCollection = async (collectionId: string) => {
     try {
-      await fetch(`/api/collections/${collectionId}`, {
+      console.log('🗑️ Deleting collection:', collectionId)
+      
+      const response = await fetch(`/api/collections/${collectionId}`, {
         method: 'DELETE',
       })
-      setCollections(safeCollections.filter(c => c.id !== collectionId))
+
+      if (response.ok) {
+        setCollections(safeCollections.filter(c => c.id !== collectionId))
+        console.log('✅ Collection deleted')
+      } else {
+        console.error('❌ Failed to delete collection')
+      }
     } catch (error) {
       console.error('Delete collection error:', error)
     }
@@ -91,21 +109,52 @@ function Collections({ collections: initialCollections }: CollectionsProps) {
 
   const handleDeleteItem = async (collectionId: string, itemId: string) => {
     try {
-      await fetch(`/api/collections/${collectionId}/items/${itemId}`, {
+      console.log('🗑️ Deleting item:', itemId, 'from collection:', collectionId)
+      
+      const response = await fetch(`/api/collections/${collectionId}/items/${itemId}`, {
         method: 'DELETE',
       })
-      
-      setCollections(safeCollections.map(col => {
-        if (col.id === collectionId) {
-          return {
-            ...col,
-            items: col.items.filter(item => item.id !== itemId)
+
+      if (response.ok) {
+        setCollections(safeCollections.map(col => {
+          if (col.id === collectionId) {
+            return {
+              ...col,
+              items: col.items.filter(item => item.id !== itemId)
+            }
           }
-        }
-        return col
-      }))
+          return col
+        }))
+        console.log('✅ Item deleted')
+      } else {
+        console.error('❌ Failed to delete item')
+      }
     } catch (error) {
       console.error('Delete item error:', error)
+    }
+  }
+
+  const handleRenameCollection = async (collectionId: string, newName: string) => {
+    try {
+      console.log('✏️ Renaming collection:', collectionId, 'to:', newName)
+      
+      const response = await fetch(`/api/collections/${collectionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName }),
+      })
+  
+      if (response.ok) {
+        setCollections(safeCollections.map(c =>
+          c.id === collectionId ? { ...c, name: newName } : c
+        ))
+        setEditingCollection(null)
+        console.log('✅ Collection renamed')
+      } else {
+        console.error('❌ Failed to rename collection')
+      }
+    } catch (error) {
+      console.error('Rename collection error:', error)
     }
   }
 
@@ -140,121 +189,175 @@ function Collections({ collections: initialCollections }: CollectionsProps) {
   }
 
   return (
-    <div className="p-6 space-y-4 overflow-y-auto h-full">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">My Collections</h2>
-          <p className="text-sm text-gray-500 mt-1">{safeCollections.length} collections</p>
-        </div>
-        <button
-          onClick={handleRefresh}
-          disabled={loading}
-          className="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50"
-          title="Refresh collections"
-        >
-          <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {safeCollections.map((collection) => (
-          <div
-            key={collection.id}
-            className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow"
-          >
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <h3 className="font-semibold text-gray-900">{collection.name}</h3>
-                <p className="text-sm text-gray-500">{collection.items.length} items</p>
-              </div>
-              <button
-                onClick={() => handleDeleteCollection(collection.id)}
-                className="text-gray-400 hover:text-red-500 transition-colors"
-                title="Delete collection"
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
-
-            {/* Preview items */}
-            <div className="space-y-2">
-              {collection.items.slice(0, 3).map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-center gap-2 p-2 bg-gray-50 rounded text-sm"
-                >
-                  {item.thumbnail && (
-                    <img
-                      src={item.thumbnail}
-                      alt={item.title}
-                      className="w-8 h-8 rounded object-cover"
-                    />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="truncate text-gray-700">{item.title}</p>
-                    <p className="text-xs text-gray-500 capitalize">{item.type}</p>
-                  </div>
-                  <a
-                    href={item.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:text-blue-700"
-                    title="Open link"
-                  >
-                    <ExternalLink size={14} />
-                  </a>
-                </div>
-              ))}
-
-              {collection.items.length > 3 && (
-                <button
-                  onClick={() => setExpandedCollection(
-                    expandedCollection === collection.id ? null : collection.id
-                  )}
-                  className="text-sm text-blue-600 hover:text-blue-700 w-full text-center py-1"
-                >
-                  {expandedCollection === collection.id
-                    ? 'Show less'
-                    : `Show ${collection.items.length - 3} more`
-                  }
-                </button>
-              )}
-
-              {/* Expanded items */}
-              {expandedCollection === collection.id && (
-                <div className="space-y-2 mt-2">
-                  {collection.items.slice(3).map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center gap-2 p-2 bg-gray-50 rounded text-sm"
-                    >
-                      {item.thumbnail && (
-                        <img
-                          src={item.thumbnail}
-                          alt={item.title}
-                          className="w-8 h-8 rounded object-cover"
-                        />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="truncate text-gray-700">{item.title}</p>
-                        <p className="text-xs text-gray-500 capitalize">{item.type}</p>
-                      </div>
-                      <button
-                        onClick={() => handleDeleteItem(collection.id, item.id)}
-                        className="text-gray-400 hover:text-red-500"
-                        title="Remove item"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+    <>
+      <div className="p-6 space-y-4 overflow-y-auto h-full">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">My Collections</h2>
+            <p className="text-sm text-gray-500 mt-1">{safeCollections.length} collections</p>
           </div>
-        ))}
+          <button
+            onClick={handleRefresh}
+            disabled={loading}
+            className="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50"
+            title="Refresh collections"
+          >
+            <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {safeCollections.map((collection) => (
+            <div
+              key={collection.id}
+              className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow"
+            >
+              <div className="flex items-start justify-between mb-3">
+                {editingCollection?.id === collection.id ? (
+                  <input
+                    type="text"
+                    value={editingCollection.name}
+                    onChange={(e) => setEditingCollection({ ...editingCollection, name: e.target.value })}
+                    onBlur={() => {
+                      if (editingCollection.name.trim() && editingCollection.name !== collection.name) {
+                        handleRenameCollection(collection.id, editingCollection.name.trim())
+                      } else {
+                        setEditingCollection(null)
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        if (editingCollection.name.trim()) {
+                          handleRenameCollection(collection.id, editingCollection.name.trim())
+                        }
+                      } else if (e.key === 'Escape') {
+                        setEditingCollection(null)
+                      }
+                    }}
+                    className="flex-1 font-semibold text-gray-900 border-b-2 border-blue-500 outline-none bg-transparent px-1"
+                    autoFocus
+                  />
+                ) : (
+                  <div className="flex-1 flex items-center gap-2 group">
+                    <div>
+                      <h3 className="font-semibold text-gray-900">{collection.name}</h3>
+                      <p className="text-sm text-gray-500">{collection.items.length} items</p>
+                    </div>
+                    <button
+                      onClick={() => setEditingCollection({ id: collection.id, name: collection.name })}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-blue-600 p-1"
+                      title="Rename collection"
+                    >
+                      <Edit2 size={14} />
+                    </button>
+                  </div>
+                )}
+                <button
+                  onClick={() => setConfirmDialog({
+                    isOpen: true,
+                    collectionId: collection.id,
+                    collectionName: collection.name,
+                  })}
+                  className="text-gray-400 hover:text-red-500 transition-colors ml-2"
+                  title="Delete collection"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+
+              {/* Preview items */}
+              <div className="space-y-2">
+                {collection.items.slice(0, 3).map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex items-center gap-2 p-2 bg-gray-50 rounded text-sm"
+                  >
+                    {item.thumbnail && (
+                      <img
+                        src={item.thumbnail}
+                        alt={item.title}
+                        className="w-8 h-8 rounded object-cover"
+                      />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="truncate text-gray-700">{item.title}</p>
+                      <p className="text-xs text-gray-500 capitalize">{item.type}</p>
+                    </div>
+                    <a
+                      href={item.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-700"
+                      title="Open link"
+                    >
+                      <ExternalLink size={14} />
+                    </a>
+                  </div>
+                ))}
+
+                {collection.items.length > 3 && (
+                  <button
+                    onClick={() => setExpandedCollection(
+                      expandedCollection === collection.id ? null : collection.id
+                    )}
+                    className="text-sm text-blue-600 hover:text-blue-700 w-full text-center py-1"
+                  >
+                    {expandedCollection === collection.id
+                      ? 'Show less'
+                      : `Show ${collection.items.length - 3} more`
+                    }
+                  </button>
+                )}
+
+                {/* Expanded items */}
+                {expandedCollection === collection.id && (
+                  <div className="space-y-2 mt-2">
+                    {collection.items.slice(3).map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex items-center gap-2 p-2 bg-gray-50 rounded text-sm"
+                      >
+                        {item.thumbnail && (
+                          <img
+                            src={item.thumbnail}
+                            alt={item.title}
+                            className="w-8 h-8 rounded object-cover"
+                          />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="truncate text-gray-700">{item.title}</p>
+                          <p className="text-xs text-gray-500 capitalize">{item.type}</p>
+                        </div>
+                        <button
+                          onClick={() => handleDeleteItem(collection.id, item.id)}
+                          className="text-gray-400 hover:text-red-500"
+                          title="Remove item"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
+
+      {/* Confirm Delete Dialog */}
+      {confirmDialog && (
+        <ConfirmDialog
+          isOpen={confirmDialog.isOpen}
+          onClose={() => setConfirmDialog(null)}
+          onConfirm={() => handleDeleteCollection(confirmDialog.collectionId)}
+          title="Delete Collection"
+          message={`Are you sure you want to delete "${confirmDialog.collectionName}"? This will remove all ${safeCollections.find(c => c.id === confirmDialog.collectionId)?.items.length || 0} items in this collection. This action cannot be undone.`}
+          confirmText="Delete"
+          confirmStyle="danger"
+        />
+      )}
+    </>
   )
 }
 

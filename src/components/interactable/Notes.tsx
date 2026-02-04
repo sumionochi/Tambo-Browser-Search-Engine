@@ -3,9 +3,10 @@
 
 import { withInteractable, useTamboComponentState } from '@tambo-ai/react'
 import { z } from 'zod'
-import { FileText, Trash2, Link as LinkIcon, RefreshCw, ExternalLink } from 'lucide-react'
+import { FileText, Trash2, Link as LinkIcon, RefreshCw, ExternalLink, Edit2, Check, X } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
-import { SearchHistoryDialog } from '@/components/ui/SearchHistoryDialog'
+import { SearchHistoryDialog } from '@/components/dialog/SearchHistoryDialog'
+import { ConfirmDialog } from '@/components/dialog/ConfirmDialog'
 
 // Zod Schema
 export const NotesPropsSchema = z.object({
@@ -35,6 +36,17 @@ function Notes({ notes: initialNotes }: NotesProps) {
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false)
   const [selectedSearchQuery, setSelectedSearchQuery] = useState('')
+
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean
+    noteId: string
+    notePreview: string
+  } | null>(null)
+
+  const [editingNote, setEditingNote] = useState<{
+    id: string
+    content: string
+  } | null>(null)
 
   // Load notes from database on mount
   useEffect(() => {
@@ -84,12 +96,44 @@ function Notes({ notes: initialNotes }: NotesProps) {
 
   const handleDeleteNote = async (noteId: string) => {
     try {
-      await fetch(`/api/notes/${noteId}`, {
+      console.log('🗑️ Deleting note:', noteId)
+      
+      const response = await fetch(`/api/notes/${noteId}`, {
         method: 'DELETE',
       })
-      setNotes(safeNotes.filter(n => n.id !== noteId))
+
+      if (response.ok) {
+        setNotes(safeNotes.filter(n => n.id !== noteId))
+        console.log('✅ Note deleted')
+      } else {
+        console.error('❌ Failed to delete note')
+      }
     } catch (error) {
       console.error('Delete note error:', error)
+    }
+  }
+
+  const handleUpdateNote = async (noteId: string, newContent: string) => {
+    try {
+      console.log('✏️ Updating note:', noteId)
+      
+      const response = await fetch(`/api/notes/${noteId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: newContent }),
+      })
+
+      if (response.ok) {
+        setNotes(safeNotes.map(n =>
+          n.id === noteId ? { ...n, content: newContent } : n
+        ))
+        setEditingNote(null)
+        console.log('✅ Note updated')
+      } else {
+        console.error('❌ Failed to update note')
+      }
+    } catch (error) {
+      console.error('Update note error:', error)
     }
   }
 
@@ -148,6 +192,7 @@ function Notes({ notes: initialNotes }: NotesProps) {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {sortedNotes.map((note) => {
             const isExpanded = expandedNote === note.id
+            const isEditing = editingNote?.id === note.id
             const preview = note.content.slice(0, 150)
             const needsExpansion = note.content.length > 150
 
@@ -163,27 +208,75 @@ function Notes({ notes: initialNotes }: NotesProps) {
                       {new Date(note.createdAt).toLocaleDateString()}
                     </span>
                   </div>
-                  <button
-                    onClick={() => handleDeleteNote(note.id)}
-                    className="text-gray-400 hover:text-red-500 transition-colors"
-                    title="Delete note"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    {!isEditing && (
+                      <button
+                        onClick={() => setEditingNote({ id: note.id, content: note.content })}
+                        className="text-gray-400 hover:text-blue-600 transition-colors"
+                        title="Edit note"
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setConfirmDialog({
+                        isOpen: true,
+                        noteId: note.id,
+                        notePreview: note.content.slice(0, 50) + (note.content.length > 50 ? '...' : ''),
+                      })}
+                      className="text-gray-400 hover:text-red-500 transition-colors"
+                      title="Delete note"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 </div>
 
-                <p className="text-gray-700 text-sm whitespace-pre-wrap mb-3">
-                  {isExpanded ? note.content : preview}
-                  {needsExpansion && !isExpanded && '...'}
-                </p>
+                {isEditing ? (
+                  <div className="space-y-2">
+                    <textarea
+                      value={editingNote.content}
+                      onChange={(e) => setEditingNote({ ...editingNote, content: e.target.value })}
+                      className="w-full text-gray-700 text-sm border-2 border-blue-500 rounded p-2 outline-none min-h-[120px] resize-y"
+                      autoFocus
+                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          if (editingNote.content.trim()) {
+                            handleUpdateNote(note.id, editingNote.content.trim())
+                          }
+                        }}
+                        className="flex-1 flex items-center justify-center gap-1 bg-blue-600 text-white text-sm py-1.5 rounded hover:bg-blue-700"
+                      >
+                        <Check size={14} />
+                        Save
+                      </button>
+                      <button
+                        onClick={() => setEditingNote(null)}
+                        className="flex-1 flex items-center justify-center gap-1 bg-gray-200 text-gray-700 text-sm py-1.5 rounded hover:bg-gray-300"
+                      >
+                        <X size={14} />
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-gray-700 text-sm whitespace-pre-wrap mb-3">
+                      {isExpanded ? note.content : preview}
+                      {needsExpansion && !isExpanded && '...'}
+                    </p>
 
-                {needsExpansion && (
-                  <button
-                    onClick={() => setExpandedNote(isExpanded ? null : note.id)}
-                    className="text-sm text-blue-600 hover:text-blue-700"
-                  >
-                    {isExpanded ? 'Show less' : 'Read more'}
-                  </button>
+                    {needsExpansion && (
+                      <button
+                        onClick={() => setExpandedNote(isExpanded ? null : note.id)}
+                        className="text-sm text-blue-600 hover:text-blue-700"
+                      >
+                        {isExpanded ? 'Show less' : 'Read more'}
+                      </button>
+                    )}
+                  </>
                 )}
 
                 {note.sourceSearch && (
@@ -218,6 +311,19 @@ function Notes({ notes: initialNotes }: NotesProps) {
         onClose={() => setDialogOpen(false)}
         searchQuery={selectedSearchQuery}
       />
+
+      {/* Confirm Delete Dialog */}
+      {confirmDialog && (
+        <ConfirmDialog
+          isOpen={confirmDialog.isOpen}
+          onClose={() => setConfirmDialog(null)}
+          onConfirm={() => handleDeleteNote(confirmDialog.noteId)}
+          title="Delete Note"
+          message={`Are you sure you want to delete this note: "${confirmDialog.notePreview}"? This action cannot be undone.`}
+          confirmText="Delete"
+          confirmStyle="danger"
+        />
+      )}
     </>
   )
 }

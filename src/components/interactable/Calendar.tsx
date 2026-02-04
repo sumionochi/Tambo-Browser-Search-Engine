@@ -3,8 +3,9 @@
 
 import { withInteractable, useTamboComponentState } from '@tambo-ai/react'
 import { z } from 'zod'
-import { Calendar as CalendarIcon, Clock, Trash2, CheckCircle, RefreshCw } from 'lucide-react'
+import { Calendar as CalendarIcon, Clock, Trash2, CheckCircle, RefreshCw, Edit2, Check, X } from 'lucide-react'
 import { useEffect, useState, useRef } from 'react'
+import { ConfirmDialog } from '@/components/dialog/ConfirmDialog'
 
 // Zod Schema
 export const CalendarPropsSchema = z.object({
@@ -21,6 +22,13 @@ export const CalendarPropsSchema = z.object({
 
 type CalendarProps = z.infer<typeof CalendarPropsSchema>
 
+interface EditingEvent {
+  id: string
+  title: string
+  datetime: string
+  note: string
+}
+
 function Calendar({ events: initialEvents }: CalendarProps) {
   const [events, setEvents] = useTamboComponentState(
     "events",
@@ -31,6 +39,14 @@ function Calendar({ events: initialEvents }: CalendarProps) {
   const [loading, setLoading] = useState(false)
   const hasLoadedRef = useRef(false)
   const isLoadingRef = useRef(false)
+
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean
+    eventId: string
+    eventTitle: string
+  } | null>(null)
+
+  const [editingEvent, setEditingEvent] = useState<EditingEvent | null>(null)
 
   // Load events from database on mount
   useEffect(() => {
@@ -75,10 +91,18 @@ function Calendar({ events: initialEvents }: CalendarProps) {
 
   const handleDeleteEvent = async (eventId: string) => {
     try {
-      await fetch(`/api/calendar/${eventId}`, {
+      console.log('🗑️ Deleting event:', eventId)
+      
+      const response = await fetch(`/api/calendar/${eventId}`, {
         method: 'DELETE',
       })
-      setEvents(safeEvents.filter(e => e.id !== eventId))
+
+      if (response.ok) {
+        setEvents(safeEvents.filter(e => e.id !== eventId))
+        console.log('✅ Event deleted')
+      } else {
+        console.error('❌ Failed to delete event')
+      }
     } catch (error) {
       console.error('Delete event error:', error)
     }
@@ -89,17 +113,57 @@ function Calendar({ events: initialEvents }: CalendarProps) {
     if (!event) return
 
     try {
-      await fetch(`/api/calendar/${eventId}`, {
+      console.log('✓ Toggling complete status:', eventId)
+      
+      const response = await fetch(`/api/calendar/${eventId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ completed: !event.completed }),
       })
 
-      setEvents(safeEvents.map(e => 
-        e.id === eventId ? { ...e, completed: !e.completed } : e
-      ))
+      if (response.ok) {
+        setEvents(safeEvents.map(e => 
+          e.id === eventId ? { ...e, completed: !e.completed } : e
+        ))
+        console.log('✅ Event status updated')
+      } else {
+        console.error('❌ Failed to update event')
+      }
     } catch (error) {
       console.error('Toggle complete error:', error)
+    }
+  }
+
+  const handleUpdateEvent = async (eventId: string, updates: Partial<EditingEvent>) => {
+    try {
+      console.log('✏️ Updating event:', eventId)
+      
+      const response = await fetch(`/api/calendar/${eventId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: updates.title,
+          datetime: updates.datetime,
+          note: updates.note,
+        }),
+      })
+
+      if (response.ok) {
+        setEvents(safeEvents.map(e =>
+          e.id === eventId ? { 
+            ...e, 
+            title: updates.title || e.title,
+            datetime: updates.datetime || e.datetime,
+            note: updates.note !== undefined ? updates.note : e.note,
+          } : e
+        ))
+        setEditingEvent(null)
+        console.log('✅ Event updated')
+      } else {
+        console.error('❌ Failed to update event')
+      }
+    } catch (error) {
+      console.error('Update event error:', error)
     }
   }
 
@@ -141,71 +205,122 @@ function Calendar({ events: initialEvents }: CalendarProps) {
   }
 
   return (
-    <div className="p-6 space-y-6 overflow-y-auto h-full">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">My Calendar</h2>
-          <p className="text-sm text-gray-500 mt-1">{upcomingEvents.length} upcoming</p>
+    <>
+      <div className="p-6 space-y-6 overflow-y-auto h-full">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">My Calendar</h2>
+            <p className="text-sm text-gray-500 mt-1">{upcomingEvents.length} upcoming</p>
+          </div>
+          <button
+            onClick={handleRefresh}
+            disabled={loading}
+            className="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50"
+            title="Refresh calendar"
+          >
+            <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
+          </button>
         </div>
-        <button
-          onClick={handleRefresh}
-          disabled={loading}
-          className="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50"
-          title="Refresh calendar"
-        >
-          <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
-        </button>
+
+        {/* Upcoming Events */}
+        {upcomingEvents.length > 0 && (
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">Upcoming</h3>
+            <div className="space-y-3">
+              {upcomingEvents.map((event) => (
+                <EventCard
+                  key={event.id}
+                  event={event}
+                  editingEvent={editingEvent}
+                  onEditChange={setEditingEvent}
+                  onCancelEdit={() => setEditingEvent(null)}
+                  onSaveEdit={handleUpdateEvent}
+                  onDelete={(id, title) => setConfirmDialog({ isOpen: true, eventId: id, eventTitle: title })}
+                  onToggleComplete={handleToggleComplete}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Completed Events */}
+        {completedEvents.length > 0 && (
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">Completed</h3>
+            <div className="space-y-3">
+              {completedEvents.map((event) => (
+                <EventCard
+                  key={event.id}
+                  event={event}
+                  editingEvent={editingEvent}
+                  onEditChange={setEditingEvent}
+                  onCancelEdit={() => setEditingEvent(null)}
+                  onSaveEdit={handleUpdateEvent}
+                  onDelete={(id, title) => setConfirmDialog({ isOpen: true, eventId: id, eventTitle: title })}
+                  onToggleComplete={handleToggleComplete}
+                />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Upcoming Events */}
-      {upcomingEvents.length > 0 && (
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-3">Upcoming</h3>
-          <div className="space-y-3">
-            {upcomingEvents.map((event) => (
-              <EventCard
-                key={event.id}
-                event={event}
-                onDelete={handleDeleteEvent}
-                onToggleComplete={handleToggleComplete}
-              />
-            ))}
-          </div>
-        </div>
+      {/* Confirm Delete Dialog */}
+      {confirmDialog && (
+        <ConfirmDialog
+          isOpen={confirmDialog.isOpen}
+          onClose={() => setConfirmDialog(null)}
+          onConfirm={() => handleDeleteEvent(confirmDialog.eventId)}
+          title="Delete Event"
+          message={`Are you sure you want to delete "${confirmDialog.eventTitle}"? This action cannot be undone.`}
+          confirmText="Delete"
+          confirmStyle="danger"
+        />
       )}
-
-      {/* Completed Events */}
-      {completedEvents.length > 0 && (
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-3">Completed</h3>
-          <div className="space-y-3">
-            {completedEvents.map((event) => (
-              <EventCard
-                key={event.id}
-                event={event}
-                onDelete={handleDeleteEvent}
-                onToggleComplete={handleToggleComplete}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
+    </>
   )
 }
 
 function EventCard({ 
   event, 
+  editingEvent,
+  onEditChange,
+  onCancelEdit,
+  onSaveEdit,
   onDelete, 
   onToggleComplete 
 }: { 
   event: any
-  onDelete: (id: string) => void
+  editingEvent: EditingEvent | null
+  onEditChange: (event: EditingEvent | null) => void
+  onCancelEdit: () => void
+  onSaveEdit: (id: string, updates: Partial<EditingEvent>) => void
+  onDelete: (id: string, title: string) => void
   onToggleComplete: (id: string) => void
 }) {
   const eventDate = new Date(event.datetime)
   const isToday = eventDate.toDateString() === new Date().toDateString()
-  const isPast = eventDate < new Date()
+  const isEditing = editingEvent?.id === event.id
+
+  // Format datetime for input field (YYYY-MM-DDTHH:mm)
+  const formatDatetimeForInput = (isoString: string) => {
+    const date = new Date(isoString)
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    const hours = String(date.getHours()).padStart(2, '0')
+    const minutes = String(date.getMinutes()).padStart(2, '0')
+    return `${year}-${month}-${day}T${hours}:${minutes}`
+  }
+
+  const handleStartEdit = () => {
+    onEditChange({
+      id: event.id,
+      title: event.title,
+      datetime: event.datetime,
+      note: event.note || '',
+    })
+  }
 
   return (
     <div 
@@ -215,66 +330,143 @@ function EventCard({
         ${isToday && !event.completed ? 'border-blue-300 bg-blue-50' : ''}
       `}
     >
-      <div className="flex items-start justify-between">
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-2">
-            <h4 className={`font-semibold ${event.completed ? 'line-through text-gray-500' : 'text-gray-900'}`}>
-              {event.title}
-            </h4>
-            {isToday && !event.completed && (
-              <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded">
-                Today
-              </span>
+      {isEditing && editingEvent ? (
+        // Edit Mode
+        <div className="space-y-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Title
+            </label>
+            <input
+              type="text"
+              value={editingEvent.title}
+              onChange={(e) => onEditChange({ ...editingEvent, title: e.target.value })}
+              className="w-full border border-gray-300 rounded px-3 py-2 text-sm outline-none focus:border-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Date & Time
+            </label>
+            <input
+              type="datetime-local"
+              value={formatDatetimeForInput(editingEvent.datetime)}
+              onChange={(e) => {
+                const newDatetime = new Date(e.target.value).toISOString()
+                onEditChange({ ...editingEvent, datetime: newDatetime })
+              }}
+              className="w-full border border-gray-300 rounded px-3 py-2 text-sm outline-none focus:border-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Note (optional)
+            </label>
+            <textarea
+              value={editingEvent.note}
+              onChange={(e) => onEditChange({ ...editingEvent, note: e.target.value })}
+              className="w-full border border-gray-300 rounded px-3 py-2 text-sm outline-none focus:border-blue-500 resize-y min-h-[60px]"
+              placeholder="Add a note..."
+            />
+          </div>
+
+          <div className="flex items-center gap-2 pt-2">
+            <button
+              onClick={() => {
+                if (editingEvent.title.trim()) {
+                  onSaveEdit(event.id, {
+                    title: editingEvent.title.trim(),
+                    datetime: editingEvent.datetime,
+                    note: editingEvent.note,
+                  })
+                }
+              }}
+              className="flex-1 flex items-center justify-center gap-1 bg-blue-600 text-white text-sm py-2 rounded hover:bg-blue-700"
+            >
+              <Check size={14} />
+              Save Changes
+            </button>
+            <button
+              onClick={onCancelEdit}
+              className="flex-1 flex items-center justify-center gap-1 bg-gray-200 text-gray-700 text-sm py-2 rounded hover:bg-gray-300"
+            >
+              <X size={14} />
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        // View Mode
+        <div className="flex items-start justify-between">
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-2">
+              <h4 className={`font-semibold ${event.completed ? 'line-through text-gray-500' : 'text-gray-900'}`}>
+                {event.title}
+              </h4>
+              {isToday && !event.completed && (
+                <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded">
+                  Today
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-4 text-sm text-gray-600 mb-2">
+              <div className="flex items-center gap-1">
+                <CalendarIcon size={14} />
+                <span>{eventDate.toLocaleDateString()}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <Clock size={14} />
+                <span>{eventDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+              </div>
+            </div>
+
+            {event.note && (
+              <p className="text-sm text-gray-600 mt-2">{event.note}</p>
+            )}
+
+            {event.linkedCollection && (
+              <div className="mt-2">
+                <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
+                  📚 Linked to collection
+                </span>
+              </div>
             )}
           </div>
 
-          <div className="flex items-center gap-4 text-sm text-gray-600 mb-2">
-            <div className="flex items-center gap-1">
-              <CalendarIcon size={14} />
-              <span>{eventDate.toLocaleDateString()}</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <Clock size={14} />
-              <span>{eventDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-            </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleStartEdit}
+              className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              title="Edit event"
+            >
+              <Edit2 size={18} />
+            </button>
+            <button
+              onClick={() => onToggleComplete(event.id)}
+              className={`
+                p-2 rounded-lg transition-colors
+                ${event.completed 
+                  ? 'text-green-600 hover:bg-green-100' 
+                  : 'text-gray-400 hover:bg-gray-100'
+                }
+              `}
+              title={event.completed ? 'Mark incomplete' : 'Mark complete'}
+            >
+              <CheckCircle size={18} />
+            </button>
+            <button
+              onClick={() => onDelete(event.id, event.title)}
+              className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+              title="Delete event"
+            >
+              <Trash2 size={18} />
+            </button>
           </div>
-
-          {event.note && (
-            <p className="text-sm text-gray-600 mt-2">{event.note}</p>
-          )}
-
-          {event.linkedCollection && (
-            <div className="mt-2">
-              <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
-                📚 Linked to collection
-              </span>
-            </div>
-          )}
         </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => onToggleComplete(event.id)}
-            className={`
-              p-2 rounded-lg transition-colors
-              ${event.completed 
-                ? 'text-green-600 hover:bg-green-100' 
-                : 'text-gray-400 hover:bg-gray-100'
-              }
-            `}
-            title={event.completed ? 'Mark incomplete' : 'Mark complete'}
-          >
-            <CheckCircle size={18} />
-          </button>
-          <button
-            onClick={() => onDelete(event.id)}
-            className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-            title="Delete event"
-          >
-            <Trash2 size={18} />
-          </button>
-        </div>
-      </div>
+      )}
     </div>
   )
 }
