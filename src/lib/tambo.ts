@@ -10,7 +10,11 @@ import { DataCard, dataCardSchema } from "@/components/ui/card-data";
 import { searchResultsComponent } from "@/components/generative/SearchResults";
 import { pexelsGridComponent } from "@/components/generative/PexelsGrid";
 import { repoExplorerComponent } from "@/components/generative/RepoExplorer";
-import { gitHubArchitectureDiagramComponent } from "@/components/generative/GitHubArchitectureDiagram"; // ← NEW
+import { gitHubArchitectureDiagramComponent } from "@/components/generative/GitHubArchitectureDiagram";
+
+// Phase 3: Workflow components (created in Steps 8-9)
+import { workflowExecutorComponent } from "@/components/generative/WorkflowExecutor";
+import { dynamicReportComponent } from "@/components/generative/DynamicReport";
 
 // Import example services (keep these if they're client-safe)
 import {
@@ -32,29 +36,23 @@ export const components: TamboComponent[] = [
     component: DataCard,
     propsSchema: dataCardSchema,
   },
-  {
-    name: "Graph",
-    description: "A component that renders various types of charts",
-    component: Graph,
-    propsSchema: graphSchema,
-  },
-  {
-    name: "DataCard",
-    description: "A component that displays options as clickable cards",
-    component: DataCard,
-    propsSchema: dataCardSchema,
-  },
   searchResultsComponent,
   pexelsGridComponent,
   repoExplorerComponent,
   analyticsGraphComponent,
   locationMapComponent,
   gitHubArchitectureDiagramComponent,
+
+  // Phase 3: Workflow components
+  workflowExecutorComponent,
+  dynamicReportComponent,
 ];
 
 // Client-safe tool wrappers that call API routes
 export const tools: TamboTool[] = [
-  // Example tools (keep if client-safe)
+  // ──────────────────────────────────────────
+  // Example tools
+  // ──────────────────────────────────────────
   {
     name: "countryPopulation",
     description: "Get population statistics by country",
@@ -99,6 +97,10 @@ export const tools: TamboTool[] = [
       })
     ),
   },
+
+  // ──────────────────────────────────────────
+  // Existing tools
+  // ──────────────────────────────────────────
   {
     name: "add_to_collection",
     description: `Bookmark search results to a collection by specifying which result numbers to save.
@@ -242,6 +244,187 @@ DO NOT add any other text or explanations.`,
       success: z.boolean(),
       message: z.string(),
       variationsGenerated: z.number(),
+    }),
+  },
+
+  // ──────────────────────────────────────────
+  // Phase 3: AI Workflow Tools
+  // ──────────────────────────────────────────
+
+  // Step 5: Execute Research Workflow
+  {
+    name: "execute_research_workflow",
+    description: `Start an automated multi-step research workflow. Use this when the user wants to:
+- Research and compare multiple things (e.g., "Compare top 5 AI tools")
+- Conduct in-depth research on a topic (e.g., "Research React alternatives")
+- Analyze trends or data across sources (e.g., "Analyze GitHub activity of JS frameworks")
+- Create a report from web/GitHub/image research
+
+The system will:
+1. Break the goal into discrete research steps
+2. Execute each step automatically (search, extract, analyze)
+3. Generate a structured report with findings
+
+After calling this tool, ALWAYS render the WorkflowExecutor component with the returned workflowId and steps so the user can see live progress.
+
+Example response after tool returns:
+"I've started a research workflow with {totalSteps} steps. Here's the live progress:"
+[Render WorkflowExecutor component]`,
+
+    tool: async (input: any) => {
+      const response = await fetch("/api/workflows/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      return response.json();
+    },
+
+    inputSchema: z.object({
+      goal: z
+        .string()
+        .describe(
+          "Natural language research goal (e.g., 'Compare top 5 React state management libraries by GitHub stars and npm downloads')"
+        ),
+      sources: z
+        .array(z.enum(["google", "github", "pexels"]))
+        .optional()
+        .default(["google"])
+        .describe(
+          "Which search sources to use. Use 'google' for web search, 'github' for repos, 'pexels' for images."
+        ),
+      depth: z
+        .enum(["quick", "standard", "deep"])
+        .optional()
+        .default("standard")
+        .describe(
+          "Research depth: 'quick' (3 steps, 5 results), 'standard' (5 steps, 10 results), 'deep' (8 steps, 20 results)"
+        ),
+      outputFormat: z
+        .enum(["comparison", "analysis", "timeline", "summary"])
+        .optional()
+        .default("summary")
+        .describe(
+          "Report format: 'comparison' for side-by-side, 'analysis' for deep dive, 'timeline' for chronological, 'summary' for overview"
+        ),
+    }),
+
+    outputSchema: z.object({
+      success: z.boolean(),
+      workflowId: z.string(),
+      title: z.string(),
+      status: z.string(),
+      totalSteps: z.number(),
+      steps: z.array(
+        z.object({
+          index: z.number(),
+          type: z.string(),
+          title: z.string(),
+          description: z.string(),
+          status: z.string(),
+        })
+      ),
+      message: z.string(),
+    }),
+  },
+
+  // Step 6: Generate Report from Collection
+  {
+    name: "generate_report_from_collection",
+    description: `Generate an AI research report from an existing collection. Use this when the user wants to:
+- Summarize a collection they've built up (e.g., "Summarize my AI Tools collection")
+- Create a comparison from bookmarked items (e.g., "Compare everything in my React collection")
+- Analyze collected research (e.g., "Create an analysis from my research collection")
+
+The system will fetch all items from the collection, use AI to synthesize them,
+and generate a structured report with sections, tables, and insights.
+
+After success, render the DynamicReport component with the returned reportId.`,
+
+    tool: async (input: any) => {
+      const response = await fetch("/api/reports/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      return response.json();
+    },
+
+    inputSchema: z.object({
+      collectionId: z
+        .string()
+        .describe("ID of the collection to generate report from"),
+      reportType: z
+        .enum(["summary", "comparison", "analysis", "timeline"])
+        .optional()
+        .default("summary")
+        .describe("Type of report to generate"),
+      title: z
+        .string()
+        .optional()
+        .describe(
+          "Custom title for the report (optional, AI will generate one if not provided)"
+        ),
+    }),
+
+    outputSchema: z.object({
+      success: z.boolean(),
+      reportId: z.string(),
+      report: z.object({
+        id: z.string(),
+        title: z.string(),
+        summary: z.string(),
+        format: z.string(),
+      }),
+      message: z.string(),
+    }),
+  },
+
+  // Step 7: Get Workflow Status
+  {
+    name: "get_workflow_status",
+    description: `Check the current status of a running research workflow. Use this when:
+- The user asks about workflow progress (e.g., "How's my research going?")
+- You need to check if a workflow has completed before showing results
+- The user wants to see what step a workflow is on
+
+Returns real-time progress including per-step status and completion percentage.
+If the workflow is complete and has a report, render the DynamicReport component.`,
+
+    tool: async (input: any) => {
+      const response = await fetch(
+        `/api/workflows/${input.workflowId}/status`,
+        {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+      return response.json();
+    },
+
+    inputSchema: z.object({
+      workflowId: z.string().describe("ID of the workflow to check status for"),
+    }),
+
+    outputSchema: z.object({
+      workflowId: z.string(),
+      title: z.string(),
+      status: z.string(),
+      currentStep: z.number(),
+      totalSteps: z.number(),
+      progress: z.number(),
+      steps: z.array(
+        z.object({
+          index: z.number(),
+          type: z.string(),
+          title: z.string(),
+          status: z.string(),
+          error: z.string().nullable(),
+        })
+      ),
+      reportId: z.string().nullable(),
+      reportTitle: z.string().nullable(),
+      errorMessage: z.string().nullable(),
     }),
   },
 ];
