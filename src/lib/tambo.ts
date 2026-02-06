@@ -1,6 +1,8 @@
 // lib/tambo.ts
 import type { TamboComponent, TamboTool } from "@tambo-ai/react";
 import { z } from "zod";
+import { analyticsGraphComponent } from "@/components/interactable/AnalyticsGraph";
+import { locationMapComponent } from "@/components/interactable/LocationMap";
 
 // Import components only (client-safe)
 import { Graph, graphSchema } from "@/components/tambo/graph";
@@ -8,6 +10,7 @@ import { DataCard, dataCardSchema } from "@/components/ui/card-data";
 import { searchResultsComponent } from "@/components/generative/SearchResults";
 import { pexelsGridComponent } from "@/components/generative/PexelsGrid";
 import { repoExplorerComponent } from "@/components/generative/RepoExplorer";
+import { gitHubArchitectureDiagramComponent } from "@/components/generative/GitHubArchitectureDiagram"; // ← NEW
 
 // Import example services (keep these if they're client-safe)
 import {
@@ -29,9 +32,24 @@ export const components: TamboComponent[] = [
     component: DataCard,
     propsSchema: dataCardSchema,
   },
+  {
+    name: "Graph",
+    description: "A component that renders various types of charts",
+    component: Graph,
+    propsSchema: graphSchema,
+  },
+  {
+    name: "DataCard",
+    description: "A component that displays options as clickable cards",
+    component: DataCard,
+    propsSchema: dataCardSchema,
+  },
   searchResultsComponent,
   pexelsGridComponent,
   repoExplorerComponent,
+  analyticsGraphComponent,
+  locationMapComponent,
+  gitHubArchitectureDiagramComponent,
 ];
 
 // Client-safe tool wrappers that call API routes
@@ -184,8 +202,6 @@ The system will automatically extract the URLs and details for you.`,
       message: z.string(),
     }),
   },
-  // lib/tambo.ts
-
   {
     name: "generate_image_variations",
     description: `Edit an image from the most recent Pexels search.
@@ -219,7 +235,7 @@ DO NOT add any other text or explanations.`,
         .number()
         .optional()
         .default(1)
-        .describe("Number of variations (default: 1, max: 10)"), // ← Changed default to 1
+        .describe("Number of variations (default: 1, max: 10)"),
     }),
 
     outputSchema: z.object({

@@ -1,11 +1,11 @@
 // components/layout/NavigationBar.tsx
 'use client'
 
-import { Search, BookMarked, Calendar, FileText, Palette, LogOut } from 'lucide-react'
+import { Search, BookMarked, Calendar, FileText, Palette, LogOut, BarChart3, MapPin, Layout } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 
-type WorkspaceView = 'search' | 'collections' | 'calendar' | 'notes' | 'studio'
+type WorkspaceView = 'search' | 'collections' | 'calendar' | 'notes' | 'studio' | 'analytics' | 'map' | 'canvas'
 
 interface NavigationBarProps {
   activeView: WorkspaceView
@@ -24,6 +24,9 @@ export function NavigationBar({ activeView, onViewChange, userEmail }: Navigatio
 
   const tabs = [
     { id: 'search' as const, label: 'Search', icon: Search },
+    { id: 'analytics' as const, label: 'Analytics', icon: BarChart3 },
+    { id: 'map' as const, label: 'Map', icon: MapPin },
+    { id: 'canvas' as const, label: 'Canvas', icon: Layout }, // ← NEW: Canvas tab
     { id: 'collections' as const, label: 'Collections', icon: BookMarked },
     { id: 'calendar' as const, label: 'Calendar', icon: Calendar },
     { id: 'notes' as const, label: 'Notes', icon: FileText },
@@ -34,11 +37,11 @@ export function NavigationBar({ activeView, onViewChange, userEmail }: Navigatio
     <div className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 shrink-0">
       {/* Logo */}
       <div className="flex items-center gap-3">
-        <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
+        <div className="w-8 h-8 bg-linear-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
           <span className="text-white font-bold text-sm">F</span>
         </div>
         <div>
-          <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+          <h1 className="text-xl font-bold bg-linear-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
             FlowSearch AI
           </h1>
           <p className="text-xs text-gray-500">Research Operating System</p>
