@@ -1,11 +1,7 @@
-<p align="center">
-  <img src="public/logo.png" alt="Tambo Browser" width="80" />
-</p>
-
-<h1 align="center">Tambo Browser — Research OS</h1>
+<h1 align="center">Tambo Browser — Search Engine</h1>
 
 <p align="center">
-  <strong>The first AI-native research operating system where every interaction produces rich, interactive UI — not just text.</strong>
+  <strong>Tambo Browser — Search Engine : Generative, Interactive UI with Fully Managed Workflows Using everysingle Tambo Components and Features</strong>
 </p>
 
 <p align="center">
@@ -38,7 +34,7 @@ Ask ChatGPT to "compare React vs Vue on GitHub" and you get a wall of markdown. 
 
 ## 💡 The Solution
 
-**Tambo Browser** is a Research Operating System that uses [Tambo AI's](https://tambo.co) generative UI framework to render **real, interactive components directly in the chat stream.**
+**Tambo Browser** is a Fully AI enhance Web Browser + Search Engine that uses [Tambo AI's](https://tambo.co) generative UI framework to render **real, interactive components directly in the chat stream.**
 
 When you ask "Compare React vs Vue vs Svelte on GitHub," you don't get text — you get a **live bar chart** that auto-fetches GitHub API data and renders stars, forks, and watchers side-by-side.
 
