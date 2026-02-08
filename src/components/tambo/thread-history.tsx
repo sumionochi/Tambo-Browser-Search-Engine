@@ -275,7 +275,7 @@ const ThreadHistoryNewButton = React.forwardRef<
       <PlusIcon className="h-4 w-4 bg-green-600 rounded-full text-white" />
       <span
         className={cn(
-          "text-sm font-medium whitespace-nowrap absolute left-8 pb-[2px] ",
+          "text-sm font-medium whitespace-nowrap absolute left-8 pb-0.5 ",
           isCollapsed
             ? "opacity-0 max-w-0 overflow-hidden pointer-events-none"
             : "opacity-100 transition-all duration-300 delay-100",
@@ -622,7 +622,7 @@ const ThreadOptionsDropdown = ({
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <DropdownMenu.Content
-          className="min-w-[160px] text-xs bg-popover rounded-md p-1 shadow-md border border-border"
+          className="min-w-40 text-xs bg-popover rounded-md p-1 shadow-md border border-border"
           sideOffset={5}
           align="end"
         >

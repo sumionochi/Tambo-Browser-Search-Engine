@@ -137,7 +137,7 @@ function CalendarInline({ maxItems, showCompleted, filterTitle }: Props) {
               }}>
               <div className="flex items-start gap-3">
                 {/* Date pill */}
-                <div className="flex flex-col items-center shrink-0 min-w-[44px] pt-0.5">
+                <div className="flex flex-col items-center shrink-0 min-w-11 pt-0.5">
                   <span className="text-[10px] uppercase font-bold tracking-wide"
                     style={{ color: isToday ? 'var(--fs-sage-600)' : 'var(--fs-text-muted)' }}>
                     {date.toLocaleDateString(undefined, { month: 'short' })}
